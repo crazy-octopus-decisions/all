@@ -298,7 +298,7 @@ def testParamsMeta(params,dat):
     pWS,pLS,pWSFin,pLSFin,thetaW,thetaL,alpha,gamma,kws = params
     #print(alpha,gamma)
     errs = []
-    for i in range(100): #reduce variance
+    for i in range(10): #reduce variance
       meta = META(dat,pWS,pLS,pWSFin,pLSFin,thetaW,thetaL,alpha,gamma,kws)
       #print(params)
       meta.run_model()
@@ -308,7 +308,8 @@ def testParamsMeta(params,dat):
     return meanErr # 
     #return -np.sum(np.log(meta.liks)) # neg lok lik
 
-#TODO need to update to get continues values to minimise (eg, repeat prob)
+#TODO time varying param for kws? or just try HMM?
+# what should determine HMM belief - previous mouse behaviour?
 
 accsMeta = []
 paramsMeta = []
@@ -342,6 +343,59 @@ plt.bar(x = np.arange(len(accs2)),height=accs2,alpha=0.5,color = 'cyan')
 plt.bar(x = np.arange(len(accsWS)),height=accsWS,alpha=0.5,color = 'yellow')
 plt.xlabel('session')
 plt.ylabel('proportion correct model choices')
-#TODO: most important - behaviour over time
-#TODO: make fig pretty
-#savefig = plt.savefig
+
+dat = alldat[0]
+response = dat['response'] #+1 # to make it 0,1,2 rather than -1,0,1
+feedb = np.array(dat['feedback_type'])
+con_right = dat['contrast_right']
+con_left = dat['contrast_left']
+#need to calculate what correct action actually was
+correct_acts = []
+for i in range(len(feedb)):
+    if con_right[i] == 0 and con_left[i] == 0:
+        correct_acts.append(0)
+    elif con_right[i] > con_left[i]:
+        correct_acts.append(-1)
+    elif con_right[i] < con_left[i]:
+        correct_acts.append(1)
+    else: # equal contrast - maybe remove
+        correct_acts.append(np.random.choice([-1,1]))
+correct_acts = np.array(correct_acts) + 1 #to make it 0,1,2 rather than -1,0,1
+
+testPs = paramsMeta[0]
+testAccs = []
+correct = []
+meanSame = []
+for i in range(100):
+    tmeta = META(dat,testPs[0],testPs[1],testPs[2],testPs[3],testPs[4],testPs[5],testPs[6],testPs[7],testPs[8])
+    tmeta.run_model()
+    correct.append([p==j for p,j in zip(tmeta.mod_acts,correct_acts)])
+    testAccs.append(([p==j for p,j in zip(tmeta.mod_acts,tmeta.mouse_action)]))
+meanAcc = np.mean(correct,axis=0)
+meanSame = np.mean(testAccs,axis=0)
+
+#plotting mouse accuracy over time
+
+accuracy = np.zeros(len(feedb))
+accuracy_rm = np.zeros(len(feedb))
+mod_acc_rm = np.zeros(len(feedb))
+mean_same_rm = np.zeros(len(feedb))
+window = 50
+for i in range(len(feedb)):
+    #get rid of same level contrast trials with 50% reward chance regardless of left or right
+    if feedb[i] == 1:# and (con_right[i] != con_left[i] or con_right[i] == 0): #allow a no-go trial
+        accuracy[i] = 1.
+    else: #elif (con_right[i] != con_left[i] or con_right[i] == 0):
+        accuracy[i] = 0.
+    # Accuracy running mean
+    accuracy_rm[i] = np.mean(accuracy[max(0,i-window):i])
+    mod_acc_rm[i] = np.mean(meanAcc[max(0,i-window):i])
+    mean_same_rm[i] = np.mean(meanSame[max(0,i-window):i])
+#print(accuracy_rm)
+plt.plot(accuracy_rm)
+plt.plot(mod_acc_rm)
+plt.plot(mean_same_rm)
+plt.xlabel('trials')
+plt.ylabel('running average accuracy - window size = ' + str(window))
+plt.show()
+print(np.mean(testAccs))
